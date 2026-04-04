@@ -8,10 +8,7 @@ Quick Start & Testing Script
 import sys
 import os
 
-# Fix encoding untuk Windows
-import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
+# Python 3.9+ memiliki UTF-8 support default
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
@@ -110,7 +107,7 @@ def test_modules():
         print(f"  ✓ ImagePreprocessor OK (output shape: {resized.shape})")
         
         print("\n[TESTING] FaceDetector...")
-        detector = FaceDetector(use_onnx=False)
+        detector = FaceDetector()  # Local Haar Cascade
         detections = detector.detect(frame)
         print(f"  ✓ FaceDetector OK (found {len(detections)} faces)")
         

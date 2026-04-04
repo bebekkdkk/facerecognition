@@ -1,0 +1,13 @@
+# Requirements untuk Raspberry Pi dengan Python 3.9.2
+# Install dengan: pip install -r requirements-rpi.txt
+# Optimized untuk ARM Architecture (ARMv7 & ARMv8)
+
+# Core Dependencies - ARM optimized versions
+numpy==1.21.6
+opencv-python==4.5.5.64
+pyarrow==10.0.1
+lancedb==0.3.11
+
+# Note: ONNX Runtime tidak perlu karena menggunakan local Haar Cascade
+# Untuk performance monitoring (optional):
+# psutil==5.9.4

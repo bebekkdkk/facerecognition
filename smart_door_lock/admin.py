@@ -95,6 +95,7 @@ def delete_user(db):
 
 def export_users(db):
     """Export user list to JSON"""
+    from datetime import datetime
     stats = db.get_stats()
     users_data = {
         "timestamp": datetime.now().isoformat(),

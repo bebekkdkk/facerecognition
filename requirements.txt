@@ -1,5 +1,13 @@
+# Requirements untuk Desktop / Development Environment
+# Install dengan: pip install -r requirements.txt
+# Python 3.9.2+ required
+
+# Core Dependencies
 opencv-python==4.8.1.78
 numpy==1.24.3
-onnxruntime==1.16.3
-lancedb==0.3.11
 pyarrow==13.0.0
+lancedb==0.3.11
+
+# Optional - untuk development/testing
+# pytest==7.0.0
+# black==22.0.0
