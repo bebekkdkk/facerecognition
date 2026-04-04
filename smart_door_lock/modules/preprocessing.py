@@ -8,7 +8,11 @@ Image Preprocessing Module
 
 import cv2
 import numpy as np
-from config import TARGET_FACE_SIZE, FRAME_HEIGHT, FRAME_WIDTH
+from config import TARGET_FACE_SIZE, FRAME_HEIGHT, FRAME_WIDTH, IS_RASPBERRY_PI
+
+# Choose interpolation method based on platform
+# RPi: use faster INTER_LINEAR; Desktop: use better quality INTER_CUBIC
+INTERPOLATION_METHOD = cv2.INTER_LINEAR if IS_RASPBERRY_PI else cv2.INTER_CUBIC
 
 
 class ImagePreprocessor:
@@ -20,7 +24,7 @@ class ImagePreprocessor:
         
     def resize_frame(self, frame, width=FRAME_WIDTH, height=FRAME_HEIGHT):
         """
-        Resize frame ke ukuran standar
+        Resize frame ke ukuran standar - optimized untuk RPi
         
         Args:
             frame: Input frame dari camera
@@ -30,7 +34,7 @@ class ImagePreprocessor:
         Returns:
             Resized frame
         """
-        return cv2.resize(frame, (width, height), interpolation=cv2.INTER_LINEAR)
+        return cv2.resize(frame, (width, height), interpolation=INTERPOLATION_METHOD)
     
     def crop_face(self, frame, bbox, padding=0.1):
         """
@@ -74,9 +78,9 @@ class ImagePreprocessor:
         Returns:
             Normalized face image
         """
-        # Resize ke target size
+        # Resize ke target size - optimized untuk RPi
         face_resized = cv2.resize(face_img, self.target_size, 
-                                  interpolation=cv2.INTER_CUBIC)
+                                  interpolation=INTERPOLATION_METHOD)
         
         # Convert to grayscale untuk histogram equalization
         if len(face_resized.shape) == 3:

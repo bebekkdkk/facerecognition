@@ -6,7 +6,16 @@ Face Embedding Module
 
 import cv2
 import numpy as np
-import onnxruntime as ort
+
+# Try to import onnxruntime, fallback to CPU-only mode if not available
+try:
+    import onnxruntime as ort
+    ONNX_AVAILABLE = True
+except ImportError:
+    ONNX_AVAILABLE = False
+    ort = None
+    print("[WARNING] onnxruntime not installed. Will use feature-based embedding only.")
+
 from config import TARGET_FACE_SIZE, EMBEDDING_DIM
 
 
@@ -23,6 +32,10 @@ class FaceEmbedder:
         self.onnx_path = onnx_path
         self.onnx_session = None
         self.use_onnx = False
+        
+        if not ONNX_AVAILABLE:
+            print("[INFO] ONNX Runtime not available, using fallback embedding")
+            return
         
         if onnx_path:
             try:

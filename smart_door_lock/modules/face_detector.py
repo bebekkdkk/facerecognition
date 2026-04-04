@@ -1,50 +1,43 @@
 """
 Face Detection Module
-- SCRFD via ONNX Runtime untuk deteksi wajah
-- Fallback ke OpenCV Haar Cascade
+- Use Haar Cascade untuk deteksi wajah
+- Simple dan reliable untuk Raspberry Pi
 """
 
 import cv2
 import numpy as np
-import onnxruntime as ort
-from config import FACE_DETECT_CONFIDENCE, FACE_MIN_SCALE
+from config import FACE_DETECT_CONFIDENCE, FACE_MIN_SCALE, HAAR_CASCADE_PATH
 
 
 class FaceDetector:
-    """Face detector menggunakan SCRFD atau Haar Cascade"""
+    """Face detector menggunakan Haar Cascade - Optimized untuk RPi"""
     
-    def __init__(self, use_onnx=False, onnx_path=None):
+    def __init__(self):
         """
-        Initialize face detector
-        
-        Args:
-            use_onnx: Gunakan ONNX SCRFD model jika True
-            onnx_path: Path ke SCRFD ONNX model
+        Initialize face detector dengan Haar Cascade lokal
         """
-        self.use_onnx = use_onnx and onnx_path is not None
-        self.onnx_path = onnx_path
-        self.onnx_session = None
-        
-        if self.use_onnx:
-            try:
-                self.onnx_session = ort.InferenceSession(
-                    onnx_path,
-                    providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+        try:
+            self.haar_cascade = cv2.CascadeClassifier(HAAR_CASCADE_PATH)
+            
+            # Check jika cascade loaded berhasil
+            if self.haar_cascade.empty():
+                print(f"[WARNING] Haar Cascade tidak bisa di-load dari: {HAAR_CASCADE_PATH}")
+                print(f"[INFO] Fallback ke cascade default dari cv2.data")
+                self.haar_cascade = cv2.CascadeClassifier(
+                    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 )
-                print(f"[INFO] SCRFD ONNX model loaded: {onnx_path}")
-            except Exception as e:
-                print(f"[WARNING] ONNX model loading failed: {e}")
-                print("[INFO] Fallback ke Haar Cascade")
-                self.use_onnx = False
-        
-        # Haar Cascade sebagai fallback
-        self.haar_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
+            else:
+                print(f"[INFO] Haar Cascade loaded successfully: {HAAR_CASCADE_PATH}")
+        except Exception as e:
+            print(f"[ERROR] Failed to load Haar Cascade: {e}")
+            # Fallback ke default
+            self.haar_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
         
     def detect_with_haar(self, frame):
         """
-        Detect wajah menggunakan Haar Cascade
+        Detect wajah menggunakan Haar Cascade lokal
         
         Args:
             frame: Input frame (BGR)
@@ -54,71 +47,25 @@ class FaceDetector:
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        faces = self.haar_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.3,
-            minNeighbors=5,
-            minSize=(FACE_MIN_SCALE, FACE_MIN_SCALE)
-        )
-        
-        # Convert dari (x,y,w,h) ke [(x,y,w,h,conf), ...]
-        # Haar Cascade tidak memberikan confidence score
-        detections = [(x, y, w, h, 1.0) for x, y, w, h in faces]
-        return detections
-    
-    def detect_with_onnx(self, frame):
-        """
-        Detect wajah menggunakan SCRFD ONNX
-        
-        Args:
-            frame: Input frame (BGR, 480x480)
-            
-        Returns:
-            List of detections [(x1, y1, x2, y2, confidence), ...]
-        """
-        if self.onnx_session is None:
-            return []
-        
         try:
-            # Preprocess
-            img = cv2.resize(frame, (480, 480))
-            img = (img - 127.5) / 128.0  # Normalize
-            img = img.transpose(2, 0, 1)[np.newaxis, ...]  # HWC to NCHW
-            img = img.astype(np.float32)
+            faces = self.haar_cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.3,
+                minNeighbors=5,
+                minSize=(FACE_MIN_SCALE, FACE_MIN_SCALE)
+            )
             
-            # Inference
-            input_name = self.onnx_session.get_inputs()[0].name
-            outputs = self.onnx_session.run(None, {input_name: img})
-            
-            # Parse outputs
-            # SCRFD outputs: [bboxes, landmarks, scores]
-            bboxes = outputs[0][0]
-            scores = outputs[2][0]
-            
-            # Filter oleh confidence
-            detections = []
-            h, w = frame.shape[:2]
-            
-            for bbox, score in zip(bboxes, scores):
-                if score > FACE_DETECT_CONFIDENCE:
-                    x1, y1, x2, y2 = bbox
-                    # Scale ke frame size
-                    x1 = int(x1 * w / 480)
-                    y1 = int(y1 * h / 480)
-                    x2 = int(x2 * w / 480)
-                    y2 = int(y2 * h / 480)
-                    
-                    detections.append((x1, y1, x2, y2, float(score)))
-            
+            # Convert dari (x,y,w,h) ke [(x,y,w,h,conf), ...]
+            # Haar Cascade tidak memberikan confidence score, default 1.0
+            detections = [(x, y, w, h, 1.0) for x, y, w, h in faces]
             return detections
-            
         except Exception as e:
-            print(f"[ERROR] ONNX inference failed: {e}")
+            print(f"[ERROR] Haar Cascade detection failed: {e}")
             return []
     
     def detect(self, frame):
         """
-        Detect wajah dalam frame
+        Detect wajah dalam frame - Gunakan Haar Cascade
         
         Args:
             frame: Input frame (BGR)
@@ -126,16 +73,7 @@ class FaceDetector:
         Returns:
             List of detections dengan format (x, y, w, h, confidence)
         """
-        if self.use_onnx:
-            detections = self.detect_with_onnx(frame)
-            # Convert dari (x1,y1,x2,y2) ke (x,y,w,h)
-            detections = [
-                (x1, y1, x2-x1, y2-y1, conf) 
-                for x1, y1, x2, y2, conf in detections
-            ]
-            return detections
-        else:
-            return self.detect_with_haar(frame)
+        return self.detect_with_haar(frame)
     
     def draw_detections(self, frame, detections, thickness=2, 
                        color=(0, 255, 0), show_confidence=True):
