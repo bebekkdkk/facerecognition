@@ -1,187 +1,158 @@
 """
 Face Embedding Module
-- Extract face embeddings menggunakan ArcFace model
+- Extract face embeddings menggunakan MobileFaceNet TensorFlow Lite model
 - L2 normalization
+- Optimized untuk Raspberry Pi 3
 """
 
 import cv2
 import numpy as np
+import threading
 
-# Try to import onnxruntime, fallback to CPU-only mode if not available
-try:
-    import onnxruntime as ort
-    ONNX_AVAILABLE = True
-except ImportError:
-    ONNX_AVAILABLE = False
-    ort = None
-    print("[WARNING] onnxruntime not installed. Will use feature-based embedding only.")
-
-from config import TARGET_FACE_SIZE, EMBEDDING_DIM
+# Global interpreter dan lock untuk thread-safety
+_tflite_interpreter = None
+_tflite_lock = threading.Lock()
 
 
 class FaceEmbedder:
-    """Face embedder menggunakan ArcFace ONNX model"""
+    """Face embedder menggunakan MobileFaceNet.tflite"""
     
-    def __init__(self, onnx_path=None):
+    # Standard face size untuk MobileFaceNet
+    TARGET_FACE_SIZE = (112, 112)
+    EMBEDDING_DIM = 128  # MobileFaceNet typical output
+    
+    def __init__(self, model_path):
         """
-        Initialize face embedder
+        Initialize face embedder dengan MobileFaceNet.tflite
         
         Args:
-            onnx_path: Path ke ArcFace ONNX model
+            model_path (str): Path ke MobileFaceNet.tflite model
         """
-        self.onnx_path = onnx_path
-        self.onnx_session = None
-        self.use_onnx = False
-        
-        if not ONNX_AVAILABLE:
-            print("[INFO] ONNX Runtime not available, using fallback embedding")
-            return
-        
-        if onnx_path:
-            try:
-                self.onnx_session = ort.InferenceSession(
-                    onnx_path,
-                    providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
-                )
-                self.use_onnx = True
-                print(f"[INFO] ArcFace ONNX model loaded: {onnx_path}")
-            except Exception as e:
-                print(f"[WARNING] ArcFace ONNX model loading failed: {e}")
-                print("[INFO] Will use feature-based embedding")
+        self.model_path = model_path
+        self.interpreter = None
+        self.input_details = None
+        self.output_details = None
+        self._init_interpreter()
     
-    def simple_embedding(self, face_img):
-        """
-        Simple feature-based embedding sebagai fallback
-        Menggunakan histogram dan edge features
-        
-        Args:
-            face_img: Preprocessed face image (112x112)
-            
-        Returns:
-            Embedding vector (512,)
-        """
-        # Ensure correct size
-        if face_img.shape != TARGET_FACE_SIZE:
-            face_img = cv2.resize(face_img, TARGET_FACE_SIZE)
-        
-        # Convert to grayscale jika kondisi tertentu
-        if len(face_img.shape) == 3:
-            gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = face_img
-        
-        # Ensure uint8 untuk histogram calculation
-        if gray.dtype != np.uint8:
-            if gray.max() <= 1:
-                gray = (gray * 255).astype(np.uint8)
-            else:
-                gray = gray.astype(np.uint8)
-        
-        # Extract histogram features
-        hist_features = []
-        for i in range(0, 112, 28):  # 4x4 grid
-            for j in range(0, 112, 28):
-                patch = gray[i:i+28, j:j+28]
-                hist = cv2.calcHist([patch], [0], None, [32], [0, 256])
-                hist_features.extend(hist.flatten())
-        
-        # Extract edge features
-        edges = cv2.Canny(gray, 100, 200)
-        edge_hist = cv2.calcHist([edges], [0], None, [32], [0, 256])
-        
-        # Combine features - convert semua ke numpy array dulu
-        hist_array = np.array(hist_features).flatten()
-        edge_array = edge_hist.flatten()
-        
-        # Pad edge histogram ke same size dengan hist
-        if len(edge_array) < len(hist_array):
-            edge_array = np.pad(edge_array, (0, len(hist_array) - len(edge_array)))
-        
-        # Concatenate properly
-        embedding = np.concatenate([hist_array, edge_array[:len(hist_array)]])
-        
-        # Pad atau trim ke 512
-        if len(embedding) < EMBEDDING_DIM:
-            embedding = np.pad(embedding, (0, EMBEDDING_DIM - len(embedding)))
-        else:
-            embedding = embedding[:EMBEDDING_DIM]
-        
-        # L2 normalize
-        embedding = self._l2_normalize(embedding)
-        
-        return embedding.astype(np.float32)
-    
-    def extract_with_onnx(self, face_img):
-        """
-        Extract embedding menggunakan ArcFace ONNX
-        
-        Args:
-            face_img: Preprocessed face image (112x112, float32, [0,1])
-            
-        Returns:
-            Embedding vector (512,)
-        """
-        if self.onnx_session is None:
-            return self.simple_embedding(face_img)
+    def _init_interpreter(self):
+        """Initialize TensorFlow Lite interpreter"""
+        global _tflite_interpreter
         
         try:
-            # Ensure correct shape dan type
-            if face_img.shape != TARGET_FACE_SIZE:
-                face_img = cv2.resize(face_img, TARGET_FACE_SIZE)
-            
-            # Konversi ke float32 jika belum
-            if face_img.dtype != np.float32:
-                face_img = face_img.astype(np.float32)
-            
-            # Prepare input
-            if len(face_img.shape) == 2:  # Grayscale
-                face_img = cv2.cvtColor(face_img, cv2.COLOR_GRAY2BGR)
-            
-            # NCHW format
-            img_input = face_img.transpose(2, 0, 1)[np.newaxis, ...]
-            
-            # Inference
-            input_name = self.onnx_session.get_inputs()[0].name
-            embedding = self.onnx_session.run(None, {input_name: img_input})
-            
-            # Output adalah embedding
-            embedding = embedding[0][0]  # Take first batch
-            
-            # L2 normalize
-            embedding = self._l2_normalize(embedding)
-            
-            return embedding.astype(np.float32)
-            
-        except Exception as e:
-            print(f"[ERROR] ONNX inference failed: {e}")
-            return self.simple_embedding(face_img)
+            import tflite_runtime.interpreter as tflite
+        except ImportError:
+            try:
+                import tensorflow.lite.python.lite as tflite
+            except ImportError:
+                raise ImportError(
+                    "tflite_runtime or tensorflow not found. "
+                    "Install with: pip install tflite-runtime"
+                )
+        
+        with _tflite_lock:
+            try:
+                self.interpreter = tflite.Interpreter(model_path=self.model_path)
+                self.interpreter.allocate_tensors()
+                
+                self.input_details = self.interpreter.get_input_details()
+                self.output_details = self.interpreter.get_output_details()
+                
+                print(f"[INFO] MobileFaceNet model loaded: {self.model_path}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to load embedder model: {e}")
     
-    def extract(self, face_img):
+    def preprocess_face(self, face_image):
+        """
+        Preprocess face image untuk MobileFaceNet
+        
+        Args:
+            face_image (np.ndarray): Cropped face image (BGR format dari OpenCV)
+            
+        Returns:
+            np.ndarray: Preprocessed image
+        """
+        # Resize ke target size
+        face_resized = cv2.resize(face_image, self.TARGET_FACE_SIZE)
+        
+        # Convert BGR to RGB jika diperlukan
+        face_rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB)
+        
+        # Normalisasi ke [0, 1]
+        face_normalized = face_rgb.astype(np.float32) / 255.0
+        
+        # Subtract mean jika diperlukan (whitening)
+        # Mean values typically: [0.485, 0.456, 0.406] untuk ImageNet
+        # Namun untuk face, sering menggunakan [0.5, 0.5, 0.5]
+        mean = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+        std = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+        
+        face_normalized = (face_normalized - mean) / std
+        
+        return face_normalized
+    
+    def extract_embedding(self, face_image):
         """
         Extract embedding dari face image
         
         Args:
-            face_img: Preprocessed face image
+            face_image (np.ndarray): Cropped face image
             
         Returns:
-            Embedding vector (512,)
+            np.ndarray: Face embedding (1D vector)
         """
-        if self.use_onnx:
-            return self.extract_with_onnx(face_img)
-        else:
-            return self.simple_embedding(face_img)
+        if self.interpreter is None:
+            raise RuntimeError("Interpreter not initialized")
+        
+        # Preprocess
+        face_preprocessed = self.preprocess_face(face_image)
+        
+        # Add batch dimension: (112, 112, 3) -> (1, 112, 112, 3)
+        input_data = np.expand_dims(face_preprocessed, axis=0).astype(np.float32)
+        
+        # Run inference
+        with _tflite_lock:
+            try:
+                self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
+                self.interpreter.invoke()
+                
+                embedding = self.interpreter.get_tensor(self.output_details[0]['index'])
+            except Exception as e:
+                raise RuntimeError(f"Inference failed: {e}")
+        
+        # Output shape typically: (1, embedding_dim)
+        embedding = embedding.flatten()
+        
+        # L2 normalization
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+        
+        return embedding
+    
+    def batch_extract(self, face_images):
+        """
+        Extract embeddings dari multiple faces
+        
+        Args:
+            face_images (list): List of face images
+            
+        Returns:
+            list: List of embeddings
+        """
+        embeddings = []
+        for face_img in face_images:
+            embedding = self.extract_embedding(face_img)
+            embeddings.append(embedding)
+        return embeddings
+    
+    # Legacy compatibility methods
+    def extract(self, face_image):
+        """Legacy method for backward compatibility"""
+        return self.extract_embedding(face_image)
     
     @staticmethod
     def _l2_normalize(vector):
-        """
-        L2 normalize vector
-        
-        Args:
-            vector: Input vector
-            
-        Returns:
-            Normalized vector
-        """
+        """L2 normalize vector"""
         norm = np.linalg.norm(vector)
         if norm == 0:
             return vector
@@ -201,7 +172,7 @@ class FaceEmbedder:
         """
         # Embedding sudah di-normalize, jadi dot product adalah cosine similarity
         similarity = np.dot(embedding1, embedding2)
-        # Clamp ke [0, 1]
+        # Clamp ke [-1, 1]
         similarity = np.clip(similarity, -1.0, 1.0)
         # Convert dari [-1, 1] ke [0, 1]
         similarity = (similarity + 1) / 2
@@ -220,3 +191,82 @@ class FaceEmbedder:
             Distance (higher = more different)
         """
         return float(np.linalg.norm(embedding1 - embedding2))
+
+
+def cosine_similarity(embedding1, embedding2):
+    """
+    Calculate cosine similarity antara dua embeddings
+    
+    Args:
+        embedding1 (np.ndarray): First embedding
+        embedding2 (np.ndarray): Second embedding
+        
+    Returns:
+        float: Similarity score antara 0 dan 1
+    """
+    # L2 normalized embeddings
+    norm1 = np.linalg.norm(embedding1)
+    norm2 = np.linalg.norm(embedding2)
+    
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    # Cosine similarity
+    similarity = np.dot(embedding1, embedding2) / (norm1 * norm2)
+    
+    # Clamp to [0, 1]
+    similarity = max(0.0, min(1.0, similarity))
+    
+    return float(similarity)
+
+
+class EmbeddingProcessor:
+    """Processor untuk mengelola embeddings"""
+    
+    @staticmethod
+    def average_embeddings(embeddings):
+        """
+        Average multiple embeddings
+        
+        Args:
+            embeddings (list): List of embeddings
+            
+        Returns:
+            np.ndarray: Average embedding (normalized)
+        """
+        if len(embeddings) == 0:
+            raise ValueError("No embeddings provided")
+        
+        embeddings_array = np.array(embeddings)
+        avg_embedding = np.mean(embeddings_array, axis=0)
+        
+        # L2 normalization
+        norm = np.linalg.norm(avg_embedding)
+        if norm > 0:
+            avg_embedding = avg_embedding / norm
+        
+        return avg_embedding
+    
+    @staticmethod
+    def compare_embeddings(embedding1, embedding2, threshold=0.7):
+        """
+        Compare dua embeddings dan check apakah match
+        
+        Args:
+            embedding1 (np.ndarray): First embedding
+            embedding2 (np.ndarray): Second embedding
+            threshold (float): Similarity threshold untuk match
+            
+        Returns:
+            dict: {
+                'similarity': float,
+                'is_match': bool
+            }
+        """
+        similarity = cosine_similarity(embedding1, embedding2)
+        is_match = similarity >= threshold
+        
+        return {
+            'similarity': similarity,
+            'is_match': is_match
+        }

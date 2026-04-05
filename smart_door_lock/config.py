@@ -17,14 +17,13 @@ MODELS_DIR = os.path.join(BASE_DIR, 'models')
 # Face Detection Models - Haar Cascade lokal
 HAAR_CASCADE_PATH = os.path.join(MODELS_DIR, 'haarcascade_frontalface_default.xml')
 
+# TensorFlow Lite Models - MobileFaceNet & Anti-Spoofing
+MOBILEFACENET_PATH = os.path.join(MODELS_DIR, 'MobileFaceNet.tflite')
+ANTI_SPOOFING_PATH = os.path.join(MODELS_DIR, 'FaceAntiSpoofing.tflite')
+
 # Database
 DB_NAME = os.path.join(DATA_DIR, 'face_database.db')
 EMBEDDINGS_TABLE = 'face_embeddings'
-
-# Model URLs
-SCRFD_ONNX_URL = "https://huggingface.co/skytnt/anime-seg/resolve/main/face_detector.onnx"
-ARCFACE_ONNX_URL = "https://huggingface.co/onnx-community/arcface-resnet100/resolve/main/model.onnx"
-ARCFACE_WEIGHT_URL = "https://huggingface.co/skytnt/anime-seg/resolve/main/arcface.pth"
 
 # Camera Settings - Optimized untuk RPi
 CAMERA_INDEX = 0
@@ -44,20 +43,31 @@ FACE_DETECT_CONFIDENCE = 0.5
 FACE_MIN_SCALE = 40 if IS_RASPBERRY_PI else 50
 
 # Face Preprocessing
-TARGET_FACE_SIZE = (112, 112)  # ArcFace standard input
-TARGET_FACE_SIZE_SCRFD = (480, 480)
+TARGET_FACE_SIZE = (112, 112)  # MobileFaceNet standard input
 
 # Embedding Settings
-EMBEDDING_DIM = 512  # ArcFace embedding dimension
-SIMILARITY_THRESHOLD = 0.6  # Threshold untuk accept wajah
+EMBEDDING_DIM = 128  # MobileFaceNet embedding dimension
+SIMILARITY_THRESHOLD = 0.7  # Threshold untuk match (cosine similarity)
+RECOGNITION_THRESHOLD = 0.7  # Threshold untuk recognize
+
+# Anti-Spoofing Settings
+ANTI_SPOOF_INPUT_SIZE = 256
+ANTI_SPOOF_THRESHOLD = 0.2  # Score < 0.2 = REAL
+ANTI_SPOOF_LAPLACE_THRESHOLD = 50  # Blur detection threshold
+ANTI_SPOOF_LAPLACIAN_THRESHOLD = 1000
 
 # Enrollment Settings - Optimized untuk RPi
-if IS_RASPBERRY_PI:
-    ENROLLMENT_SAMPLES = 50  # RPi lebih cepat dengan sample lebih sedikit
-    ENROLLMENT_SAMPLE_INTERVAL = 3  # Setiap frame ke-3 (faster)
-else:
-    ENROLLMENT_SAMPLES = 100
-    ENROLLMENT_SAMPLE_INTERVAL = 5
+# Multi-pose enrollment: depan, kiri, kanan, atas, bawah
+ENROLLMENT_POSES = {
+    'front': {'desc': 'Depan (front)', 'delay': 0},
+    'left': {'desc': 'Kiri (left)', 'delay': 2},
+    'right': {'desc': 'Kanan (right)', 'delay': 2},
+    'up': {'desc': 'Atas (up)', 'delay': 2},
+    'down': {'desc': 'Bawah (down)', 'delay': 2}
+}
+ENROLLMENT_NUM_POSES = 5
+ENROLLMENT_SAMPLES_PER_POSE = 1  # Save 1 embedding per pose
+ENROLLMENT_TOTAL_EMBEDDINGS = 5  # Total 5 embeddings
 
 # Display Settings - Optimized untuk RPi
 if IS_RASPBERRY_PI:

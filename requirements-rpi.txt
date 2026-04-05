@@ -1,13 +1,27 @@
-# Requirements untuk Raspberry Pi dengan Python 3.9.2
+# Requirements specifically untuk Raspberry Pi 3
+# OPTIMIZED VERSION - Reduced package sizes & dependencies
 # Install dengan: pip install -r requirements-rpi.txt
-# Optimized untuk ARM Architecture (ARMv7 & ARMv8)
+# Python 3.9.2 REQUIRED (not higher!)
 
-# Core Dependencies - ARM optimized versions
-numpy==1.21.6
-opencv-python==4.5.5.64
-pyarrow==10.0.1
+# Core Dependencies (Lightweight versions untuk ARM)
+opencv-python==4.8.1.78
+numpy==1.24.3
+
+# TensorFlow Lite Runtime (MUST use for RPi - NOT full TensorFlow!)
+# This is lightweight (~20MB) vs full TensorFlow (~500MB+)
+tflite-runtime==2.14.0
+
+# Database 
 lancedb==0.3.11
+pyarrow==13.0.0
 
-# Note: ONNX Runtime tidak perlu karena menggunakan local Haar Cascade
-# Untuk performance monitoring (optional):
-# psutil==5.9.4
+# Utilities
+Pillow==10.0.0
+
+# Installation tips untuk Raspberry Pi:
+# 1. sudo apt-get install python3.9 python3.9-dev
+# 2. python3.9 -m pip install --upgrade pip
+# 3. pip install -r requirements-rpi.txt
+#
+# Note: tflite-runtime diperlukan untuk model TensorFlow Lite (.tflite files)
+# JANGAN gunakan onnxruntime atau full TensorFlow di Raspberry Pi!

@@ -12,22 +12,28 @@ from config import FACE_DETECT_CONFIDENCE, FACE_MIN_SCALE, HAAR_CASCADE_PATH
 class FaceDetector:
     """Face detector menggunakan Haar Cascade - Optimized untuk RPi"""
     
-    def __init__(self):
+    def __init__(self, model_path=None):
         """
         Initialize face detector dengan Haar Cascade lokal
+        
+        Args:
+            model_path (str): Optional path ke Haar Cascade model (override config)
         """
+        # Use provided path atau fallback ke config
+        cascade_path = model_path or HAAR_CASCADE_PATH
+        
         try:
-            self.haar_cascade = cv2.CascadeClassifier(HAAR_CASCADE_PATH)
+            self.haar_cascade = cv2.CascadeClassifier(cascade_path)
             
             # Check jika cascade loaded berhasil
             if self.haar_cascade.empty():
-                print(f"[WARNING] Haar Cascade tidak bisa di-load dari: {HAAR_CASCADE_PATH}")
+                print(f"[WARNING] Haar Cascade tidak bisa di-load dari: {cascade_path}")
                 print(f"[INFO] Fallback ke cascade default dari cv2.data")
                 self.haar_cascade = cv2.CascadeClassifier(
                     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 )
             else:
-                print(f"[INFO] Haar Cascade loaded successfully: {HAAR_CASCADE_PATH}")
+                print(f"[INFO] Haar Cascade loaded successfully: {cascade_path}")
         except Exception as e:
             print(f"[ERROR] Failed to load Haar Cascade: {e}")
             # Fallback ke default
