@@ -1,94 +1,71 @@
 """
-Face Database Module
-- LanceDB untuk vector similarity search
+Face Database Module - SQLite3 Version
+- Use SQLite3 (built-in Python) untuk vector similarity search
 - Store dan retrieve face embeddings
-- Optimized untuk Raspberry Pi
+- FULLY compatible dengan Raspberry Pi 3 (NO PyArrow/LanceDB issues)
 """
 
 import os
-import lancedb
+import sqlite3
 import numpy as np
 import json
-import pyarrow as pa
 from datetime import datetime
 from config import DB_NAME, EMBEDDINGS_TABLE, DATA_DIR
 
 
 class FaceDatabase:
-    """Face database dengan LanceDB untuk vector similarity search - RPi optimized"""
+    """Face database menggunakan SQLite3 - FULLY ARM Compatible (NO PyArrow issues!)"""
     
     def __init__(self, db_path=DB_NAME):
         """
-        Initialize database
+        Initialize SQLite3 database
         
         Args:
-            db_path: Path ke database
+            db_path: Path ke database SQLite3
         """
         self.db_path = db_path
-        self.db = None
         self.table_name = EMBEDDINGS_TABLE
-        self.connection_retries = 3
-        self.retry_delay = 0.1  # seconds
         
         # Ensure data directory exists
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         
-        self._connect()
+        # Initialize database schema
+        self._init_db()
     
-    def _connect(self):
-        """Connect ke LanceDB dengan retry logic untuk ARM"""
-        last_error = None
-        for attempt in range(self.connection_retries):
-            try:
-                self.db = lancedb.connect(self.db_path)
-                print(f"[INFO] Database connected: {self.db_path}")
-                return
-            except Exception as e:
-                last_error = e
-                if attempt < self.connection_retries - 1:
-                    import time
-                    print(f"[WARNING] Connection attempt {attempt + 1} failed, retrying...")
-                    time.sleep(self.retry_delay)
-        
-        print(f"[ERROR] Database connection failed after {self.connection_retries} attempts: {last_error}")
-        raise last_error
+    def _init_db(self):
+        """Initialize SQLite3 database dengan embedding table"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Create table jika belum ada
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.table_name} (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_seen TEXT
+                )
+            """)
+            
+            # Create index untuk search performance
+            cursor.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_name 
+                ON {self.table_name}(name)
+            """)
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"[INFO] SQLite3 Database initialized: {self.db_path}")
+        except Exception as e:
+            print(f"[ERROR] Database initialization failed: {e}")
+            raise
     
     def create_table(self):
-        """Create embedding table jika belum ada - dengan error handling untuk RPi"""
-        try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return
-            
-            if self.table_name in self.db.table_names():
-                print(f"[INFO] Table '{self.table_name}' already exists")
-                return
-            
-            # Create schema
-            schema = pa.schema([
-                pa.field("id", pa.string()),
-                pa.field("name", pa.string()),
-                pa.field("embedding", pa.list_(pa.float32(), 512)),
-                pa.field("timestamp", pa.string())
-            ])
-            
-            # Create dummy data dengan schema
-            data = {
-                "id": ["dummy"],
-                "name": ["dummy"],
-                "embedding": [np.zeros(512, dtype=np.float32)],
-                "timestamp": [datetime.now().isoformat()]
-            }
-            
-            # Create table
-            table = pa.Table.from_pydict(data, schema=schema)
-            self.db.create_table(self.table_name, data=table)
-            
-            # Delete dummy data
-            self.db.open_table(self.table_name).delete("id = 'dummy'")
-            print(f"[INFO] Table '{self.table_name}' created")
-        except Exception as e:
-            print(f"[WARNING] Table creation: {e}")
+        """Compatibility method - already created in __init__"""
+        self._init_db()
     
     def add_enrollment(self, name, embeddings, person_id=None):
         """
@@ -96,221 +73,234 @@ class FaceDatabase:
         
         Args:
             name: Nama pengguna
-            embeddings: List of embedding vectors
+            embeddings: List of embedding vectors (numpy arrays)
             person_id: ID untuk pengguna (auto-generate jika None)
             
         Returns:
-            Success status
+            bool: Success status
         """
+        if not embeddings or len(embeddings) == 0:
+            print("[ERROR] No embeddings provided")
+            return False
+        
         try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return False
-            
+            # Generate person_id jika tidak ada
             if person_id is None:
-                person_id = f"{name}_{int(datetime.now().timestamp())}"
+                person_id = f"user_{int(datetime.now().timestamp())}"
             
-            table = self.db.open_table(self.table_name)
+            # Average semua embeddings
+            if len(embeddings) == 1:
+                final_embedding = embeddings[0]
+            else:
+                embeddings_array = np.array(embeddings, dtype=np.float32)
+                final_embedding = np.mean(embeddings_array, axis=0)
+                # L2 normalize
+                norm = np.linalg.norm(final_embedding)
+                if norm > 0:
+                    final_embedding = final_embedding / norm
             
-            # Add each embedding dengan batch processing untuk RPi efficiency
-            batch_size = 10
-            for i in range(0, len(embeddings), batch_size):
-                batch = embeddings[i:i+batch_size]
-                for j, embedding in enumerate(batch):
-                    data = {
-                        "id": f"{person_id}_{i+j}",
-                        "name": name,
-                        "embedding": embedding.tolist() if isinstance(embedding, np.ndarray) else embedding,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    table.add([data])
+            # Convert embedding ke binary
+            embedding_bytes = final_embedding.astype(np.float32).tobytes()
             
-            print(f"[INFO] Added {len(embeddings)} embeddings for user: {name}")
+            # Insert ke SQLite3
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            now = datetime.now().isoformat()
+            
+            cursor.execute(f"""
+                INSERT OR REPLACE INTO {self.table_name} 
+                (id, name, embedding, created_at, last_seen)
+                VALUES (?, ?, ?, ?, ?)
+            """, (person_id, name, embedding_bytes, now, now))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"[SUCCESS] Enrollment saved: {name} (ID: {person_id})")
             return True
             
         except Exception as e:
-            print(f"[ERROR] Enrollment add failed: {e}")
+            print(f"[ERROR] Add enrollment failed: {e}")
             import traceback
             traceback.print_exc()
             return False
-    
-    def search_similar(self, query_embedding, top_k=1, threshold=0.6):
-        """
-        Search untuk wajah yang mirip dengan error handling untuk ARM
-        
-        Args:
-            query_embedding: Query embedding vector
-            top_k: Jumlah hasil teratas
-            threshold: Minimum similarity threshold
-            
-        Returns:
-            List of results dengan format yang consistent
-        """
-        try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return []
-            
-            table = self.db.open_table(self.table_name)
-            
-            # Convert ke list jika numpy array
-            if isinstance(query_embedding, np.ndarray):
-                query_embedding = query_embedding.tolist()
-            
-            # Validate embedding
-            if not query_embedding or len(query_embedding) != 512:
-                print(f"[WARNING] Invalid embedding dimension: {len(query_embedding) if query_embedding else 0}")
-                return []
-            
-            # Vector search dengan timeout handling
-            results = table.search(query_embedding).limit(top_k).to_list()
-            
-            # Filter oleh threshold dan format output
-            matches = []
-            for result in results:
-                try:
-                    # Hitung similarity dari distance
-                    distance = result.get('_distance', float('inf'))
-                    
-                    # Handle NaN atau infinite distances
-                    if np.isnan(distance) or np.isinf(distance):
-                        continue
-                    
-                    # Convert distance ke similarity (0-1)
-                    similarity = 1.0 / (1.0 + distance)
-                    
-                    if similarity >= threshold:
-                        matches.append({
-                            "name": result.get('name', 'Unknown'),
-                            "similarity": float(similarity),
-                            "timestamp": result.get('timestamp', 'N/A'),
-                            "id": result.get('id', 'N/A')
-                        })
-                except Exception as e:
-                    print(f"[WARNING] Error processing search result: {e}")
-                    continue
-            
-            return matches
-            
-        except Exception as e:
-            print(f"[ERROR] Search failed: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
     
     def get_all_users(self):
         """
-        Get semua unique users dalam database
+        Get all users dari database
         
         Returns:
-            List of user names
+            list: List of user dicts {id, name, embedding}
         """
         try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return []
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
             
-            table = self.db.open_table(self.table_name)
-            results = table.search().limit(10000).to_list()
+            cursor.execute(f"""
+                SELECT id, name, embedding 
+                FROM {self.table_name}
+            """)
             
-            # Get unique names dengan set untuk efficiency
-            unique_names = list(set([r.get('name', 'Unknown') for r in results]))
-            return sorted(unique_names)
+            rows = cursor.fetchall()
+            conn.close()
+            
+            users = []
+            for row in rows:
+                user_id, name, embedding_bytes = row
+                # Convert bytes back to numpy array
+                embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+                users.append({
+                    'id': user_id,
+                    'name': name,
+                    'embedding': embedding
+                })
+            
+            return users
             
         except Exception as e:
-            print(f"[ERROR] Get users failed: {e}")
+            print(f"[ERROR] Get all users failed: {e}")
             return []
-    
-    def delete_user(self, name):
+
+    def list_user_names(self):
+        """Return distinct enrolled user names."""
+        users = self.get_all_users()
+        names = sorted({u.get('name', 'UNKNOWN') for u in users})
+        return names
+
+    def get_user_embeddings_count(self, user_ref):
         """
-        Delete semua embedding untuk user tertentu dengan proper SQL escaping
-        
+        Count embeddings by user id or user name.
+
         Args:
-            name: Nama user
-            
-        Returns:
-            Success status
+            user_ref: user id string or user name string
         """
         try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return False
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {self.table_name} WHERE id = ? OR name = ?",
+                (user_ref, user_ref),
+            )
+            count = cursor.fetchone()[0]
+            conn.close()
+            return int(count)
+        except Exception as e:
+            print(f"[ERROR] Count user embeddings failed: {e}")
+            return 0
+
+    def search_similar(self, embedding, top_k=1, threshold=0.7):
+        """
+        Search most similar users using cosine similarity in Python.
+
+        Args:
+            embedding: Query embedding vector
+            top_k: number of results
+            threshold: minimum similarity
+        """
+        query = np.asarray(embedding, dtype=np.float32)
+        query_norm = np.linalg.norm(query)
+        if query_norm == 0:
+            return []
+
+        users = self.get_all_users()
+        results = []
+        for user in users:
+            emb = user.get('embedding')
+            if emb is None:
+                continue
+            emb = np.asarray(emb, dtype=np.float32)
+            if emb.shape != query.shape:
+                continue
+
+            denom = np.linalg.norm(emb) * query_norm
+            if denom == 0:
+                continue
+
+            sim = float(np.dot(query, emb) / denom)
+            sim = max(0.0, min(1.0, sim))
+            if sim >= threshold:
+                results.append(
+                    {
+                        'id': user.get('id'),
+                        'name': user.get('name', 'UNKNOWN'),
+                        'similarity': sim,
+                    }
+                )
+
+        results.sort(key=lambda x: x['similarity'], reverse=True)
+        return results[:top_k]
+    
+    def delete_user(self, user_id):
+        """
+        Delete user dari database
+        
+        Args:
+            user_id: User ID to delete
             
-            table = self.db.open_table(self.table_name)
-            # Escape name untuk SQL injection prevention
-            escaped_name = name.replace("'", "''")
-            table.delete(f"name = '{escaped_name}'")
-            print(f"[INFO] Deleted user: {name}")
+        Returns:
+            bool: Success status
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute(f"""
+                DELETE FROM {self.table_name}
+                WHERE id = ?
+            """, (user_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"[INFO] User deleted: {user_id}")
             return True
+            
         except Exception as e:
             print(f"[ERROR] Delete user failed: {e}")
             return False
-    
-    def get_user_embeddings_count(self, name):
-        """
-        Get jumlah embeddings untuk user
-        
-        Args:
-            name: Nama user
-            
-        Returns:
-            Count
-        """
+
+    def delete_user_by_name(self, name):
+        """Delete all records for a user name."""
         try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return 0
-            
-            table = self.db.open_table(self.table_name)
-            results = table.search().limit(10000).to_list()
-            count = sum(1 for r in results if r.get('name') == name)
-            return count
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(f"DELETE FROM {self.table_name} WHERE name = ?", (name,))
+            conn.commit()
+            conn.close()
+            print(f"[INFO] User deleted by name: {name}")
+            return True
         except Exception as e:
-            print(f"[ERROR] Count embeddings failed: {e}")
-            return 0
+            print(f"[ERROR] Delete user by name failed: {e}")
+            return False
     
     def get_stats(self):
         """
         Get database statistics
         
         Returns:
-            Dict dengan stats
+            dict: Stats {total_users, total_embeddings}
         """
         try:
-            if self.db is None:
-                print("[ERROR] Database not connected")
-                return {"total_users": 0, "total_embeddings": 0, "users": []}
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
             
-            table = self.db.open_table(self.table_name)
-            results = table.search().limit(10000).to_list()
+            cursor.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+            total_users = cursor.fetchone()[0]
+
+            cursor.execute(f"SELECT DISTINCT name FROM {self.table_name} ORDER BY name")
+            users = [row[0] for row in cursor.fetchall()]
             
-            if not results:
-                return {"total_users": 0, "total_embeddings": 0, "users": []}
+            conn.close()
             
-            unique_users = set(r.get('name') for r in results if r.get('name'))
-            
-            stats = {
-                "total_embeddings": len(results),
-                "total_users": len(unique_users),
-                "users": sorted(list(unique_users))
+            return {
+                'total_users': total_users,
+                'total_embeddings': total_users,
+                'users': users,
+                'db_path': self.db_path
             }
             
-            return stats
         except Exception as e:
             print(f"[ERROR] Get stats failed: {e}")
-            return {"total_users": 0, "total_embeddings": 0, "users": []}
-    
-    def export_metadata(self, output_path):
-        """
-        Export metadata ke JSON
-        
-        Args:
-            output_path: Output file path
-        """
-        try:
-            stats = self.get_stats()
-            with open(output_path, 'w') as f:
-                json.dump(stats, f, indent=2)
-            print(f"[INFO] Metadata exported to: {output_path}")
-        except Exception as e:
-            print(f"[ERROR] Export failed: {e}")
+            return {'total_users': 0, 'total_embeddings': 0}

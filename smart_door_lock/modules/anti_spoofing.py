@@ -8,6 +8,7 @@ Face Anti-Spoofing Module
 import cv2
 import numpy as np
 import threading
+from modules.tflite_utils import get_tflite_interpreter_class
 
 # Global interpreter dan lock untuk thread-safety
 _tflite_interpreter = None
@@ -42,21 +43,11 @@ class FaceAntiSpoofing:
     def _init_interpreter(self):
         """Initialize TensorFlow Lite interpreter (lazy load)"""
         global _tflite_interpreter
-        
-        try:
-            import tflite_runtime.interpreter as tflite
-        except ImportError:
-            try:
-                import tensorflow.lite.python.lite as tflite
-            except ImportError:
-                raise ImportError(
-                    "tflite_runtime or tensorflow not found. "
-                    "Install with: pip install tflite-runtime"
-                )
+        Interpreter = get_tflite_interpreter_class()
         
         with _tflite_lock:
             try:
-                self.interpreter = tflite.Interpreter(model_path=self.model_path)
+                self.interpreter = Interpreter(model_path=self.model_path)
                 self.interpreter.allocate_tensors()
                 
                 self.input_details = self.interpreter.get_input_details()
@@ -153,19 +144,39 @@ class FaceAntiSpoofing:
         # Step 3: Normalisasi (pixel / 255.0)
         face_normalized = face_resized.astype(np.float32) / 255.0
         
-        # Adjusting format if needed (model might expect RGB or BGR)
-        # Try BGR first (most common for OpenCV)
-        input_data = np.expand_dims(face_normalized, axis=0)
+        # Most face models are RGB; convert BGR(OpenCV) -> RGB.
+        face_rgb = cv2.cvtColor(face_normalized, cv2.COLOR_BGR2RGB)
+        input_data = np.expand_dims(face_rgb, axis=0)
+
+        input_detail = self.input_details[0]
+        input_dtype = input_detail['dtype']
+
+        if input_dtype == np.uint8:
+            scale, zero_point = input_detail.get('quantization', (0.0, 0))
+            if scale and scale > 0:
+                input_data = (input_data / scale + zero_point).astype(np.uint8)
+            else:
+                input_data = (input_data * 255.0).astype(np.uint8)
+        else:
+            input_data = input_data.astype(np.float32)
         
         # Step 4: Run inference
         with _tflite_lock:
             try:
-                self.interpreter.set_tensor(self.input_details[0]['index'], input_data.astype(np.float32))
+                self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
                 self.interpreter.invoke()
                 
                 output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
             except Exception as e:
                 raise RuntimeError(f"Inference failed: {e}")
+
+        output_detail = self.output_details[0]
+        if output_detail['dtype'] == np.uint8:
+            out_scale, out_zero = output_detail.get('quantization', (0.0, 0))
+            if out_scale and out_scale > 0:
+                output_data = (output_data.astype(np.float32) - out_zero) * out_scale
+            else:
+                output_data = output_data.astype(np.float32)
         
         # Step 5: Calculate score menggunakan exact formula:
         # score = sum(abs(clss_pred[i]) * leaf_node_mask[i])

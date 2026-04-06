@@ -5,6 +5,8 @@ Quick Start & Testing Script
 - Prepare untuk production
 """
 
+import runtime_compat  # noqa: F401 - apply runtime env guards early
+
 import sys
 import os
 
@@ -14,7 +16,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
     BASE_DIR, DATA_DIR, MODELS_DIR,
     CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT,
-    SIMILARITY_THRESHOLD, EMBEDDING_DIM
+    SIMILARITY_THRESHOLD, EMBEDDING_DIM,
+    MOBILEFACENET_PATH,
+    HAAR_CASCADE_PATH
 )
 
 try:
@@ -107,13 +111,13 @@ def test_modules():
         print(f"  ✓ ImagePreprocessor OK (output shape: {resized.shape})")
         
         print("\n[TESTING] FaceDetector...")
-        detector = FaceDetector()  # Local Haar Cascade
+        detector = FaceDetector(HAAR_CASCADE_PATH)
         detections = detector.detect(frame)
         print(f"  ✓ FaceDetector OK (found {len(detections)} faces)")
         
         print("\n[TESTING] FaceEmbedder...")
-        embedder = FaceEmbedder()
-        test_face = np.zeros((112, 112, 3), dtype=np.float32)
+        embedder = FaceEmbedder(MOBILEFACENET_PATH)
+        test_face = np.zeros((112, 112, 3), dtype=np.uint8)
         embedding = embedder.extract(test_face)
         print(f"  ✓ FaceEmbedder OK (embedding shape: {embedding.shape})")
         
@@ -150,13 +154,13 @@ def test_similarity():
     from modules import FaceEmbedder
     
     # Create test embeddings
-    emb1 = np.random.randn(512).astype(np.float32)
+    emb1 = np.random.randn(EMBEDDING_DIM).astype(np.float32)
     emb1 = FaceEmbedder._l2_normalize(emb1)
     
-    emb2 = emb1 + np.random.randn(512).astype(np.float32) * 0.01  # Similar
+    emb2 = emb1 + np.random.randn(EMBEDDING_DIM).astype(np.float32) * 0.01  # Similar
     emb2 = FaceEmbedder._l2_normalize(emb2)
     
-    emb3 = np.random.randn(512).astype(np.float32)  # Different
+    emb3 = np.random.randn(EMBEDDING_DIM).astype(np.float32)  # Different
     emb3 = FaceEmbedder._l2_normalize(emb3)
     
     # Test similarity

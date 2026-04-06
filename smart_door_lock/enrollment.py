@@ -7,6 +7,8 @@ Enrollment Script - Face Enrollment Module
 - Optimized untuk Raspberry Pi 3 + TensorFlow Lite
 """
 
+import runtime_compat  # noqa: F401 - apply runtime env guards early
+
 import cv2
 import sys
 import os
@@ -31,6 +33,9 @@ from modules.face_detector import FaceDetector
 from modules.embedder import FaceEmbedder, EmbeddingProcessor
 from modules.anti_spoofing import FaceAntiSpoofing
 from modules.database import FaceDatabase
+
+if IS_RASPBERRY_PI:
+    cv2.setNumThreads(1)
 
 class PoseEnrollmentSystem:
     """Multi-pose enrollment system untuk Raspberry Pi"""

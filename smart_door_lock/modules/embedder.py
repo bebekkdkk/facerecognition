@@ -8,6 +8,7 @@ Face Embedding Module
 import cv2
 import numpy as np
 import threading
+from modules.tflite_utils import get_tflite_interpreter_class
 
 # Global interpreter dan lock untuk thread-safety
 _tflite_interpreter = None
@@ -37,21 +38,11 @@ class FaceEmbedder:
     def _init_interpreter(self):
         """Initialize TensorFlow Lite interpreter"""
         global _tflite_interpreter
-        
-        try:
-            import tflite_runtime.interpreter as tflite
-        except ImportError:
-            try:
-                import tensorflow.lite.python.lite as tflite
-            except ImportError:
-                raise ImportError(
-                    "tflite_runtime or tensorflow not found. "
-                    "Install with: pip install tflite-runtime"
-                )
+        Interpreter = get_tflite_interpreter_class()
         
         with _tflite_lock:
             try:
-                self.interpreter = tflite.Interpreter(model_path=self.model_path)
+                self.interpreter = Interpreter(model_path=self.model_path)
                 self.interpreter.allocate_tensors()
                 
                 self.input_details = self.interpreter.get_input_details()
@@ -107,7 +98,17 @@ class FaceEmbedder:
         face_preprocessed = self.preprocess_face(face_image)
         
         # Add batch dimension: (112, 112, 3) -> (1, 112, 112, 3)
-        input_data = np.expand_dims(face_preprocessed, axis=0).astype(np.float32)
+        input_data = np.expand_dims(face_preprocessed, axis=0)
+        input_detail = self.input_details[0]
+
+        if input_detail['dtype'] == np.uint8:
+            scale, zero_point = input_detail.get('quantization', (0.0, 0))
+            if scale and scale > 0:
+                input_data = (input_data / scale + zero_point).astype(np.uint8)
+            else:
+                input_data = ((input_data + 1.0) * 127.5).astype(np.uint8)
+        else:
+            input_data = input_data.astype(np.float32)
         
         # Run inference
         with _tflite_lock:
@@ -118,6 +119,14 @@ class FaceEmbedder:
                 embedding = self.interpreter.get_tensor(self.output_details[0]['index'])
             except Exception as e:
                 raise RuntimeError(f"Inference failed: {e}")
+
+        output_detail = self.output_details[0]
+        if output_detail['dtype'] == np.uint8:
+            out_scale, out_zero = output_detail.get('quantization', (0.0, 0))
+            if out_scale and out_scale > 0:
+                embedding = (embedding.astype(np.float32) - out_zero) * out_scale
+            else:
+                embedding = embedding.astype(np.float32)
         
         # Output shape typically: (1, embedding_dim)
         embedding = embedding.flatten()

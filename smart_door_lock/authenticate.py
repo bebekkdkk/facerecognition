@@ -7,6 +7,8 @@ Authentication/Access Control Script
 - Optimized untuk Raspberry Pi
 """
 
+import runtime_compat  # noqa: F401 - apply runtime env guards early
+
 import cv2
 import sys
 import os
@@ -22,7 +24,9 @@ from config import (
     DISPLAY_FPS, SIMILARITY_THRESHOLD,
     MAX_ATTEMPTS, ATTEMPT_TIMEOUT,
     DATA_DIR, CAMERA_WARMUP_FRAMES, MEMORY_CLEANUP_INTERVAL,
-    IS_RASPBERRY_PI
+    IS_RASPBERRY_PI,
+    MOBILEFACENET_PATH,
+    HAAR_CASCADE_PATH
 )
 from modules import (
     ImagePreprocessor, FaceDetector, FaceEmbedder,
@@ -37,8 +41,8 @@ class SmartDoorLock:
         """Initialize door lock system"""
         try:
             self.preprocessor = ImagePreprocessor()
-            self.detector = FaceDetector()  # Local Haar Cascade
-            self.embedder = FaceEmbedder()
+            self.detector = FaceDetector(HAAR_CASCADE_PATH)
+            self.embedder = FaceEmbedder(MOBILEFACENET_PATH)
             self.database = FaceDatabase()
             self.tracker = FaceTracker()
             
@@ -52,6 +56,9 @@ class SmartDoorLock:
         except Exception as e:
             print(f"[ERROR] Failed to initialize system: {e}")
             raise
+
+        if IS_RASPBERRY_PI:
+            cv2.setNumThreads(1)
     
     def log_access(self, status, name, similarity=None, details=None):
         """
@@ -197,10 +204,9 @@ class SmartDoorLock:
                     
                     # Crop dan preprocess
                     face_region = frame[y:y+h, x:x+w]
-                    face_prepared = self.preprocessor.prepare_for_embedding(face_region)
                     
                     # Extract embedding
-                    embedding = self.embedder.extract(face_prepared)
+                    embedding = self.embedder.extract(face_region)
                     embeddings.append(embedding)
                 
                 tracked = self.tracker.update(detections, embeddings)

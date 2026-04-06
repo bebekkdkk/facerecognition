@@ -102,4 +102,4 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 if IS_RASPBERRY_PI:
     print(f"[CONFIG] Running on Raspberry Pi - optimized settings enabled")
     print(f"[CONFIG] Frame size: {FRAME_WIDTH}x{FRAME_HEIGHT}")
-    print(f"[CONFIG] Enrollment samples: {ENROLLMENT_SAMPLES}")
+    print(f"[CONFIG] Enrollment poses: {ENROLLMENT_NUM_POSES}")

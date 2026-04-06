@@ -57,8 +57,10 @@ def list_users(db):
     print("╚══════════════════════════════════╝\n")
     if users:
         for i, user in enumerate(users, 1):
-            count = db.get_user_embeddings_count(user)
-            print(f"{i}. {user} ({count} samples)")
+            user_id = user.get('id', 'unknown')
+            name = user.get('name', 'UNKNOWN')
+            count = db.get_user_embeddings_count(user_id)
+            print(f"{i}. {name} [{user_id}] ({count} samples)")
     else:
         print("No users enrolled.")
     print()
@@ -73,7 +75,7 @@ def delete_user(db):
     
     print("\n Available users:")
     for i, user in enumerate(users, 1):
-        print(f"{i}. {user}")
+        print(f"{i}. {user.get('name', 'UNKNOWN')} [{user.get('id', 'unknown')}]")
     
     try:
         choice = int(input("\nSelect user number to delete (0 to cancel): "))
@@ -81,10 +83,12 @@ def delete_user(db):
             return
         if 1 <= choice <= len(users):
             user = users[choice - 1]
-            confirm = input(f"\nConfirm delete '{user}'? (yes/no): ").lower()
+            user_id = user.get('id')
+            user_name = user.get('name', 'UNKNOWN')
+            confirm = input(f"\nConfirm delete '{user_name}' [{user_id}]? (yes/no): ").lower()
             if confirm == 'yes':
-                db.delete_user(user)
-                print(f"[SUCCESS] User '{user}' deleted!")
+                db.delete_user(user_id)
+                print(f"[SUCCESS] User '{user_name}' deleted!")
             else:
                 print("[CANCELLED]")
         else:
@@ -159,7 +163,7 @@ def clear_database(db):
         try:
             users = db.get_all_users()
             for user in users:
-                db.delete_user(user)
+                db.delete_user(user.get('id'))
             print("[SUCCESS] Database cleared!")
         except Exception as e:
             print(f"[ERROR] Clear failed: {e}")

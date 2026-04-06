@@ -1,22 +1,47 @@
 # Requirements specifically untuk Raspberry Pi 3
-# OPTIMIZED VERSION - Reduced package sizes & dependencies
-# Install dengan: pip install -r requirements-rpi.txt
+# CRITICAL: Versions dipilih untuk ARM compatibility!
+# Install dengan: python3.9 -m pip install -r requirements-rpi.txt
 # Python 3.9.2 REQUIRED (not higher!)
 
-# Core Dependencies (Lightweight versions untuk ARM)
-opencv-python==4.8.1.78
-numpy==1.24.3
+# ============================================================
+# CORE DEPENDENCIES - ARM COMPATIBLE VERSIONS ONLY
+# ============================================================
 
-# TensorFlow Lite Runtime (MUST use for RPi - NOT full TensorFlow!)
-# This is lightweight (~20MB) vs full TensorFlow (~500MB+)
-tflite-runtime==2.14.0
+# NumPy: 1.24.3 causes "Illegal Instruction" on ARM
+# Use 1.21.6 which is proven stable on RPi3
+numpy==1.21.6
 
-# Database 
-lancedb==0.3.11
-pyarrow==13.0.0
+# OpenCV: install from apt for best ARMv7 compatibility
+# sudo apt-get install -y python3-opencv
+
+# TensorFlow Lite Runtime (Lightweight, ARM compatible)
+tflite-runtime==2.13.0
+
+# ============================================================
+# DATABASE - ATTENTION: LanceDB not recommended for RPi3
+# ============================================================
+# PyArrow 13.0.0 has NO wheels for ARM - causes "Illegal Instruction"
+# We're using SQLITE3 instead for better ARM compatibility
+# LanceDB removed - use alternative: SQLite3 (included in Python)
 
 # Utilities
-Pillow==10.0.0
+Pillow==9.5.0
+
+# ============================================================
+# INSTALLATION COMMANDS FOR RASPBERRY PI 3
+# ============================================================
+# 1. sudo apt-get update
+# 2. sudo apt-get install python3.9 python3.9-dev python3-opencv libatlas-base-dev libjasper-dev
+# 3. python3.9 -m pip install --upgrade pip setuptools wheel
+# 4. python3.9 -m pip install -r requirements-rpi.txt --no-cache-dir
+#
+# DO NOT USE:
+# - Full TensorFlow (too heavy)
+# - ONNX Runtime (not for ARM)
+# - PyArrow 13+ (illegal instruction)
+# - LanceDB (ARM incompatible)
+# - NumPy 1.24+ (illegal instruction)
+# - OpenCV 4.8+ (no ARM wheels)
 
 # Installation tips untuk Raspberry Pi:
 # 1. sudo apt-get install python3.9 python3.9-dev

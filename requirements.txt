@@ -1,25 +1,26 @@
-# Requirements untuk Raspberry Pi 3 + Desktop
-# FULL TensorFlow Lite Support - NO ONNX!
-# Install dengan: pip install -r requirements.txt
+# Requirements untuk Desktop / Development Environment
 # Python 3.9.2+ required
+# IMPORTANT: DO NOT use versions yang tidak compatible
 
-# Core Dependencies
+# Core Dependencies (Stable versions)
 opencv-python==4.8.1.78
 numpy==1.24.3
 
-# TensorFlow Lite Runtime (Lightweight alternative to full TensorFlow)
-# For Raspberry Pi 3: use tflite-runtime
-# For Desktop: tensorflow==2.13.0 juga support TFLite
+# TensorFlow Lite Runtime (Lightweight)
 tflite-runtime==2.14.0
-
-# Database & Storage
-pyarrow==13.0.0
-lancedb==0.3.11
 
 # Utilities
 Pillow==10.0.0
 
+# ============================================================
+# DATABASE: SQLite3 built-in (NO PyArrow/LanceDB needed!)
+# ============================================================
+# PyArrow 13+ causes "Illegal Instruction" on ARM
+# LanceDB has ARM compatibility issues
+# Using SQLite3 for universal compatibility
+
 # Optional - untuk development/testing
 # pytest==7.0.0
 # black==22.0.0
+
 

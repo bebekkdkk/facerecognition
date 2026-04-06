@@ -9,6 +9,8 @@ Main entry point untuk:
 - Access control dan logging
 """
 
+import runtime_compat  # noqa: F401 - apply runtime env guards early
+
 import cv2
 import sys
 import os
@@ -35,6 +37,9 @@ from modules.embedder import FaceEmbedder
 from modules.anti_spoofing import FaceAntiSpoofing
 from modules.database import FaceDatabase
 from modules.recognition import RecognitionPipeline
+
+if IS_RASPBERRY_PI:
+    cv2.setNumThreads(1)
 
 
 class SmartDoorLockApp:
@@ -267,7 +272,7 @@ class SmartDoorLockApp:
                     self.running = False
                 elif key == ord('e'):
                     print("\n[INFO] Press 'Enter' to start enrollment")
-                    os.system("python enrollment.py")
+                    os.system(f'"{sys.executable}" enrollment.py')
                 
                 self.frame_count += 1
                 
