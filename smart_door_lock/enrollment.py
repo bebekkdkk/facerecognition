@@ -20,6 +20,10 @@ import time
 # Add parent directory ke path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Setup logging to show activities and errors in terminal
+from logging_setup import setup_logging
+logger = setup_logging()
+
 from config import (
     CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, 
     TEXT_COLOR, FAIL_COLOR, DISPLAY_FPS,
@@ -269,10 +273,8 @@ def main():
             if frame_count % MEMORY_CLEANUP_INTERVAL == 0:
                 gc.collect()
     
-    except Exception as e:
-        print(f"\n[ERROR] Error during enrollment: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error during enrollment")
         return False
     
     finally:
@@ -317,10 +319,8 @@ if __name__ == "__main__":
         success = main()
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
-        print("\n[ABORT] Program interrupted by user!")
+        logger.info("Enrollment aborted by user")
         sys.exit(1)
-    except Exception as e:
-        print(f"\n[ERROR] Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Unexpected error in enrollment")
         sys.exit(1)

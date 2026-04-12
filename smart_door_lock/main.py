@@ -23,6 +23,10 @@ import time
 # Add current directory ke path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Setup logging to capture activities and errors in terminal
+from logging_setup import setup_logging
+logger = setup_logging()
+
 from config import (
     CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, FPS,
     TEXT_COLOR, FAIL_COLOR, ERROR_COLOR, SHOW_FACE_BOX,
@@ -53,34 +57,34 @@ class SmartDoorLockApp:
         self.fps_timer = datetime.now()
         
         # Initialize components
-        print("[INFO] Initializing components...")
+        logger.info("Initializing components...")
         
         try:
             self.face_detector = FaceDetector(HAAR_CASCADE_PATH)
-            print("[SUCCESS] Face detector initialized")
+            logger.info("Face detector initialized")
             
             self.embedder = FaceEmbedder(MOBILEFACENET_PATH)
-            print("[SUCCESS] Face embedder initialized")
+            logger.info("Face embedder initialized")
             
             self.anti_spoofing = FaceAntiSpoofing(ANTI_SPOOFING_PATH)
-            print("[SUCCESS] Anti-spoofing detector initialized")
+            logger.info("Anti-spoofing detector initialized")
             
             self.database = FaceDatabase()
-            print("[SUCCESS] Database initialized")
+            logger.info("Database initialized")
             
             self.recognition_pipeline = RecognitionPipeline(
                 self.embedder, 
                 self.anti_spoofing,
                 self.database
             )
-            print("[SUCCESS] Recognition pipeline initialized")
+            logger.info("Recognition pipeline initialized")
             
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize components: {e}")
+        except Exception:
+            logger.exception("Failed to initialize components")
             raise
         
         # Initialize camera
-        print(f"\n[INFO] Initializing camera {CAMERA_INDEX}...")
+        logger.info(f"Initializing camera {CAMERA_INDEX}...")
         self.cap = cv2.VideoCapture(CAMERA_INDEX)
         
         if not self.cap.isOpened():
@@ -92,29 +96,29 @@ class SmartDoorLockApp:
         self.cap.set(cv2.CAP_PROP_FPS, FPS)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
-        print(f"[SUCCESS] Camera initialized: {FRAME_WIDTH}x{FRAME_HEIGHT} @ {FPS} FPS")
+        logger.info(f"Camera initialized: {FRAME_WIDTH}x{FRAME_HEIGHT} @ {FPS} FPS")
         
         # Storage untuk last recognition result
         self.last_result = None
         self.last_result_time = None
         
-        print("\n" + "="*70)
-        print("SMART DOOR LOCK - FACE RECOGNITION + ANTI-SPOOFING")
-        print("="*70)
-        print(f"Resolution: {FRAME_WIDTH}x{FRAME_HEIGHT}")
-        print(f"Anti-spoofing: Enabled (Threshold: 0.2)")
-        print(f"Recognition threshold: {RECOGNITION_THRESHOLD}")
-        print(f"Mode: {'Raspberry Pi Optimized' if IS_RASPBERRY_PI else 'Desktop'}")
-        print("="*70 + "\n")
+        logger.info("%s", "="*70)
+        logger.info("SMART DOOR LOCK - FACE RECOGNITION + ANTI-SPOOFING")
+        logger.info("%s", "="*70)
+        logger.info(f"Resolution: {FRAME_WIDTH}x{FRAME_HEIGHT}")
+        logger.info(f"Anti-spoofing: Enabled (Threshold: 0.2)")
+        logger.info(f"Recognition threshold: {RECOGNITION_THRESHOLD}")
+        logger.info(f"Mode: {'Raspberry Pi Optimized' if IS_RASPBERRY_PI else 'Desktop'}")
+        logger.info("%s\n", "="*70)
     
     def warmup_camera(self):
         """Warmup camera untuk stabilisasi"""
-        print(f"[ACTION] Warming up camera ({CAMERA_WARMUP_FRAMES} frames)...")
+        logger.info(f"Warming up camera ({CAMERA_WARMUP_FRAMES} frames)...")
         for i in range(CAMERA_WARMUP_FRAMES):
             ret, _ = self.cap.read()
             if not ret:
                 raise RuntimeError("Camera warmup failed")
-        print("[SUCCESS] Camera ready\n")
+        logger.info("Camera ready")
     
     def process_frame(self, frame):
         """
@@ -164,8 +168,8 @@ class SmartDoorLockApp:
                         self.last_result = result
                         self.last_result_time = datetime.now()
                 
-                except Exception as e:
-                    print(f"[ERROR] Processing face failed: {e}")
+                except Exception:
+                    logger.exception("Processing face failed")
                 
                 # Draw face box
                 if SHOW_FACE_BOX:
@@ -175,10 +179,10 @@ class SmartDoorLockApp:
             # Draw recognition results
             self._draw_results(frame_display, recognized_faces)
             
-        except Exception as e:
-            print(f"[ERROR] Frame processing failed: {e}")
-            cv2.putText(frame_display, f"Error: {str(e)}", (20, 50),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, ERROR_COLOR, 2)
+            except Exception:
+                logger.exception("Frame processing failed")
+                cv2.putText(frame_display, f"Error: unexpected", (20, 50),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, ERROR_COLOR, 2)
         
         return frame_display, recognized_faces
     
@@ -242,18 +246,18 @@ class SmartDoorLockApp:
         # Warmup camera
         try:
             self.warmup_camera()
-        except Exception as e:
-            print(f"[ERROR] Camera warmup failed: {e}")
+        except Exception:
+            logger.exception("Camera warmup failed")
             return False
         
-        print("[ACTION] Starting face recognition...\n")
+        logger.info("Starting face recognition")
         
         try:
             while self.running:
                 ret, frame = self.cap.read()
                 
                 if not ret:
-                    print("[ERROR] Failed to read from camera!")
+                    logger.error("Failed to read from camera")
                     break
                 
                 # Process frame
@@ -268,10 +272,10 @@ class SmartDoorLockApp:
                 # Handle keyboard
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
-                    print("\n[INFO] Quitting...")
+                    logger.info("Quitting requested by user")
                     self.running = False
                 elif key == ord('e'):
-                    print("\n[INFO] Press 'Enter' to start enrollment")
+                    logger.info("Launching enrollment")
                     os.system(f'"{sys.executable}" enrollment.py')
                 
                 self.frame_count += 1
@@ -281,12 +285,10 @@ class SmartDoorLockApp:
                     gc.collect()
         
         except KeyboardInterrupt:
-            print("\n[INFO] Interrupted by user")
+            logger.info("Interrupted by user")
         
-        except Exception as e:
-            print(f"\n[ERROR] Application error: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            logger.exception("Application error")
             return False
         
         finally:
@@ -295,12 +297,12 @@ class SmartDoorLockApp:
     
     def cleanup(self):
         """Cleanup resources"""
-        print("\n[ACTION] Cleaning up...")
+        logger.info("Cleaning up resources")
         if self.cap:
             self.cap.release()
         cv2.destroyAllWindows()
         gc.collect()
-        print("[SUCCESS] Cleanup complete")
+        logger.info("Cleanup complete")
 
 
 def main():
@@ -309,10 +311,8 @@ def main():
         app = SmartDoorLockApp()
         success = app.run()
         return success
-    except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Fatal error in application")
         return False
 
 

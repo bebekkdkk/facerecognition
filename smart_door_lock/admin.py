@@ -13,6 +13,10 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Setup logging so admin actions and errors show in terminal
+from logging_setup import setup_logging
+logger = setup_logging()
+
 from modules import FaceDatabase
 
 
@@ -118,9 +122,9 @@ def export_users(db):
     try:
         with open(filename, 'w') as f:
             json.dump(users_data, f, indent=2)
-        print(f"\n[SUCCESS] User list exported to: {filename}")
+        logger.info(f"User list exported to: {filename}")
     except Exception as e:
-        print(f"\n[ERROR] Export failed: {e}")
+        logger.exception("Export failed")
 
 
 def view_access_log():
@@ -153,7 +157,7 @@ def view_access_log():
         print(f"\nTotal access attempts: {len(logs)}")
         
     except Exception as e:
-        print(f"\n[ERROR] Failed to read log: {e}")
+        logger.exception("Failed to read access log")
 
 
 def clear_database(db):
@@ -165,11 +169,11 @@ def clear_database(db):
             users = db.get_all_users()
             for user in users:
                 db.delete_user(user.get('id'))
-            print("[SUCCESS] Database cleared!")
+            logger.info("Database cleared")
         except Exception as e:
-            print(f"[ERROR] Clear failed: {e}")
+            logger.exception("Clear failed")
     else:
-        print("[CANCELLED]")
+        logger.info("Database clear cancelled")
 
 
 def main():
@@ -202,10 +206,10 @@ def main():
                 print("[ERROR] Invalid option!")
                 
         except KeyboardInterrupt:
-            print("\n[ABORT] Exiting...")
+            logger.info("Admin aborted by user")
             break
         except Exception as e:
-            print(f"[ERROR] {e}")
+            logger.exception("Admin loop error")
 
 
 if __name__ == "__main__":
