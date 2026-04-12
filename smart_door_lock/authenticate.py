@@ -26,12 +26,14 @@ from config import (
     DATA_DIR, CAMERA_WARMUP_FRAMES, MEMORY_CLEANUP_INTERVAL,
     IS_RASPBERRY_PI,
     MOBILEFACENET_PATH,
+    ANTI_SPOOFING_PATH,
     HAAR_CASCADE_PATH
 )
 from modules import (
     ImagePreprocessor, FaceDetector, FaceEmbedder,
     FaceDatabase, FaceTracker
 )
+from modules.anti_spoofing import FaceAntiSpoofing
 
 
 class SmartDoorLock:
@@ -43,6 +45,7 @@ class SmartDoorLock:
             self.preprocessor = ImagePreprocessor()
             self.detector = FaceDetector(HAAR_CASCADE_PATH)
             self.embedder = FaceEmbedder(MOBILEFACENET_PATH)
+            self.anti_spoofing = FaceAntiSpoofing(ANTI_SPOOFING_PATH)
             self.database = FaceDatabase()
             self.tracker = FaceTracker()
             
@@ -205,8 +208,14 @@ class SmartDoorLock:
                     # Crop dan preprocess
                     face_region = frame[y:y+h, x:x+w]
                     
-                    # Extract embedding
-                    embedding = self.embedder.extract(face_region)
+                    # Check anti-spoofing
+                    spoof_result = self.anti_spoofing.detect(face_region)
+                    if not spoof_result.get('is_real', False):
+                        # Skip face jika fake
+                        continue
+                    
+                    # Extract embedding jika REAL
+                    embedding = self.embedder.extract_embedding(face_region)
                     embeddings.append(embedding)
                 
                 tracked = self.tracker.update(detections, embeddings)

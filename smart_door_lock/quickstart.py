@@ -118,7 +118,7 @@ def test_modules():
         print("\n[TESTING] FaceEmbedder...")
         embedder = FaceEmbedder(MOBILEFACENET_PATH)
         test_face = np.zeros((112, 112, 3), dtype=np.uint8)
-        embedding = embedder.extract(test_face)
+        embedding = embedder.extract_embedding(test_face)
         print(f"  ✓ FaceEmbedder OK (embedding shape: {embedding.shape})")
         
         print("\n[TESTING] FaceDatabase...")
@@ -151,21 +151,27 @@ def test_similarity():
     print("║       SIMILARITY TEST                  ║")
     print("╚════════════════════════════════════════╝\n")
     
-    from modules import FaceEmbedder
+    from modules.embedder import cosine_similarity
     
     # Create test embeddings
     emb1 = np.random.randn(EMBEDDING_DIM).astype(np.float32)
-    emb1 = FaceEmbedder._l2_normalize(emb1)
+    emb1_norm = np.linalg.norm(emb1)
+    if emb1_norm > 0:
+        emb1 = emb1 / emb1_norm
     
     emb2 = emb1 + np.random.randn(EMBEDDING_DIM).astype(np.float32) * 0.01  # Similar
-    emb2 = FaceEmbedder._l2_normalize(emb2)
+    emb2_norm = np.linalg.norm(emb2)
+    if emb2_norm > 0:
+        emb2 = emb2 / emb2_norm
     
     emb3 = np.random.randn(EMBEDDING_DIM).astype(np.float32)  # Different
-    emb3 = FaceEmbedder._l2_normalize(emb3)
+    emb3_norm = np.linalg.norm(emb3)
+    if emb3_norm > 0:
+        emb3 = emb3 / emb3_norm
     
     # Test similarity
-    sim1_2 = FaceEmbedder.cosine_similarity(emb1, emb2)
-    sim1_3 = FaceEmbedder.cosine_similarity(emb1, emb3)
+    sim1_2 = cosine_similarity(emb1, emb2)
+    sim1_3 = cosine_similarity(emb1, emb3)
     
     print(f"Similarity (same): {sim1_2:.4f}")
     print(f"Similarity (diff): {sim1_3:.4f}")

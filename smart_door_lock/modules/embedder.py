@@ -33,9 +33,6 @@ class FaceEmbedder:
         self.interpreter = None
         self.input_details = None
         self.output_details = None
-        self.expected_batch = 1
-        self.target_face_size = self.TARGET_FACE_SIZE
-        self.embedding_dim = self.EMBEDDING_DIM
         self._init_interpreter()
     
     def _init_interpreter(self):
@@ -50,22 +47,6 @@ class FaceEmbedder:
                 
                 self.input_details = self.interpreter.get_input_details()
                 self.output_details = self.interpreter.get_output_details()
-
-                input_shape = self.input_details[0].get('shape', np.array([1, 112, 112, 3]))
-                if len(input_shape) == 4:
-                    batch = int(input_shape[0])
-                    height = int(input_shape[1])
-                    width = int(input_shape[2])
-
-                    self.expected_batch = batch if batch > 0 else 1
-                    if width > 0 and height > 0:
-                        self.target_face_size = (width, height)
-
-                output_shape = self.output_details[0].get('shape', np.array([1, self.EMBEDDING_DIM]))
-                if len(output_shape) >= 2:
-                    emb_dim = int(output_shape[-1])
-                    if emb_dim > 0:
-                        self.embedding_dim = emb_dim
                 
                 print(f"[INFO] MobileFaceNet model loaded: {self.model_path}")
             except Exception as e:
@@ -82,7 +63,7 @@ class FaceEmbedder:
             np.ndarray: Preprocessed image
         """
         # Resize ke target size
-        face_resized = cv2.resize(face_image, self.target_face_size)
+        face_resized = cv2.resize(face_image, self.TARGET_FACE_SIZE)
         
         # Convert BGR to RGB jika diperlukan
         face_rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB)
@@ -116,14 +97,8 @@ class FaceEmbedder:
         # Preprocess
         face_preprocessed = self.preprocess_face(face_image)
         
-        # Add batch dimension: (H, W, 3) -> (1, H, W, 3)
+        # Add batch dimension: (112, 112, 3) -> (1, 112, 112, 3)
         input_data = np.expand_dims(face_preprocessed, axis=0)
-
-        # Some exported models expect fixed batch > 1 (e.g., batch=2).
-        # Duplicate the sample so shape always matches model input tensor.
-        if self.expected_batch > 1:
-            input_data = np.repeat(input_data, self.expected_batch, axis=0)
-
         input_detail = self.input_details[0]
 
         if input_detail['dtype'] == np.uint8:
@@ -153,9 +128,7 @@ class FaceEmbedder:
             else:
                 embedding = embedding.astype(np.float32)
         
-        # Output shape typically: (batch, embedding_dim)
-        if embedding.ndim > 1:
-            embedding = embedding[0]
+        # Output shape typically: (1, embedding_dim)
         embedding = embedding.flatten()
         
         # L2 normalization
