@@ -15,10 +15,8 @@ import cv2
 import sys
 import os
 import gc
-import numpy as np
+import subprocess
 from datetime import datetime
-import threading
-import time
 
 # Add current directory ke path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -29,8 +27,7 @@ from config import (
     CAMERA_WARMUP_FRAMES, MEMORY_CLEANUP_INTERVAL,
     IS_RASPBERRY_PI,
     MOBILEFACENET_PATH, ANTI_SPOOFING_PATH, HAAR_CASCADE_PATH,
-    RECOGNITION_THRESHOLD, SIMILARITY_THRESHOLD,
-    DATA_DIR
+    RECOGNITION_THRESHOLD
 )
 from modules.face_detector import FaceDetector
 from modules.embedder import FaceEmbedder
@@ -272,7 +269,11 @@ class SmartDoorLockApp:
                     self.running = False
                 elif key == ord('e'):
                     print("\n[INFO] Press 'Enter' to start enrollment")
-                    os.system(f'"{sys.executable}" enrollment.py')
+                    enrollment_script = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "enrollment.py"
+                    )
+                    subprocess.call([sys.executable, enrollment_script])
                 
                 self.frame_count += 1
                 

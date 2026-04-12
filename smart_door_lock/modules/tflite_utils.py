@@ -16,12 +16,14 @@ def get_tflite_interpreter_class():
         pass
 
     try:
-        from tensorflow.lite import Interpreter  # type: ignore
-        return Interpreter
+        import tensorflow as tf  # type: ignore
+        interpreter_cls = getattr(tf.lite, "Interpreter", None)
+        if interpreter_cls is not None:
+            return interpreter_cls
     except Exception:
         pass
 
     raise ImportError(
-        "No TensorFlow Lite interpreter available. Install `tflite-runtime` "
-        "for Raspberry Pi 3 (recommended)."
+        "No TensorFlow Lite interpreter available. Install `tensorflow-cpu` "
+        "for desktop (Windows/Linux/macOS) or `tflite-runtime` for Raspberry Pi."
     )

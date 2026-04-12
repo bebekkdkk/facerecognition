@@ -13,11 +13,9 @@ import cv2
 import sys
 import os
 import gc
-import numpy as np
-from datetime import datetime
 import time
 
-# Add parent directory ke path
+# Add current script directory ke path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (

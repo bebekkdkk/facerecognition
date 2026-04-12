@@ -9,6 +9,11 @@ import cv2
 import numpy as np
 import threading
 from modules.tflite_utils import get_tflite_interpreter_class
+from config import (
+    ANTI_SPOOF_INPUT_SIZE,
+    ANTI_SPOOF_THRESHOLD,
+    ANTI_SPOOF_LAPLACE_THRESHOLD,
+)
 
 # Global interpreter dan lock untuk thread-safety
 _tflite_interpreter = None
@@ -22,10 +27,9 @@ class FaceAntiSpoofing:
     """
     
     # Konfigurasi exact seperti requirement
-    INPUT_IMAGE_SIZE = 256
-    THRESHOLD = 0.2  # lebih kecil = REAL
-    LAPLACE_THRESHOLD = 50
-    LAPLACIAN_THRESHOLD = 1000
+    INPUT_IMAGE_SIZE = ANTI_SPOOF_INPUT_SIZE
+    THRESHOLD = ANTI_SPOOF_THRESHOLD
+    LAPLACE_THRESHOLD = ANTI_SPOOF_LAPLACE_THRESHOLD
     
     def __init__(self, model_path):
         """

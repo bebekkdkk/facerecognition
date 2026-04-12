@@ -8,6 +8,7 @@ Run on Raspberry Pi before starting app:
 import os
 import sys
 import subprocess
+import platform
 from pathlib import Path
 
 
@@ -25,6 +26,12 @@ def print_result(title, ok, detail=""):
 
 
 def main():
+    if not os.path.exists('/proc/device-tree/model'):
+        print("This self-check is intended for Raspberry Pi.")
+        print(f"Detected platform: {platform.system()} {platform.machine()}")
+        print("Skipping Raspberry Pi compatibility checks.")
+        return 0
+
     print("=" * 60)
     print("Raspberry Pi 3 Runtime Self-Check")
     print("=" * 60)

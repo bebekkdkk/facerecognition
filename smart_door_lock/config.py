@@ -22,7 +22,7 @@ MOBILEFACENET_PATH = os.path.join(MODELS_DIR, 'MobileFaceNet.tflite')
 ANTI_SPOOFING_PATH = os.path.join(MODELS_DIR, 'FaceAntiSpoofing.tflite')
 
 # Database
-DB_NAME = os.path.join(DATA_DIR, 'face_database.db')
+DB_NAME = os.path.join(DATA_DIR, 'face_database.sqlite3')
 EMBEDDINGS_TABLE = 'face_embeddings'
 
 # Camera Settings - Optimized untuk RPi
@@ -54,7 +54,6 @@ RECOGNITION_THRESHOLD = 0.7  # Threshold untuk recognize
 ANTI_SPOOF_INPUT_SIZE = 256
 ANTI_SPOOF_THRESHOLD = 0.2  # Score < 0.2 = REAL
 ANTI_SPOOF_LAPLACE_THRESHOLD = 50  # Blur detection threshold
-ANTI_SPOOF_LAPLACIAN_THRESHOLD = 1000
 
 # Enrollment Settings - Optimized untuk RPi
 # Multi-pose enrollment: depan, kiri, kanan, atas, bawah

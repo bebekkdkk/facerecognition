@@ -23,14 +23,30 @@ class FaceDatabase:
         Args:
             db_path: Path ke database SQLite3
         """
-        self.db_path = db_path
+        self.db_path = self._resolve_db_path(db_path)
         self.table_name = EMBEDDINGS_TABLE
         
         # Ensure data directory exists
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
         # Initialize database schema
         self._init_db()
+
+    @staticmethod
+    def _resolve_db_path(db_path):
+        """
+        Resolve database file path.
+
+        If a directory exists at the configured path (legacy LanceDB artifact),
+        switch to a SQLite filename in the same data directory.
+        """
+        if os.path.isdir(db_path):
+            fallback_path = os.path.join(os.path.dirname(db_path), "face_database.sqlite3")
+            print(f"[WARNING] Configured DB path is a directory: {db_path}")
+            print(f"[INFO] Using SQLite file instead: {fallback_path}")
+            return fallback_path
+
+        return db_path
     
     def _init_db(self):
         """Initialize SQLite3 database dengan embedding table"""

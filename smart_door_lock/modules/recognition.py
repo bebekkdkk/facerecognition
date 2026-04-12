@@ -7,14 +7,15 @@ Face Recognition Module
 
 import numpy as np
 from datetime import datetime
-from modules.embedder import cosine_similarity, EmbeddingProcessor
+from modules.embedder import cosine_similarity
+from config import RECOGNITION_THRESHOLD
 
 
 class FaceRecognition:
     """Face recognition engine"""
     
     # Similarity threshold untuk match
-    MATCH_THRESHOLD = 0.7
+    MATCH_THRESHOLD = RECOGNITION_THRESHOLD
     
     def __init__(self, database=None):
         """
