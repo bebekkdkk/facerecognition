@@ -1,0 +1,25 @@
+"""
+Smart Door Lock Requirements
+"""
+
+# Core dependencies
+opencv-python>=4.5.0
+numpy>=1.19.0
+
+# TensorFlow Lite - choose one:
+# For Raspberry Pi 4:
+tflite-runtime>=2.5.0
+
+# For desktop/development (alternative):
+# tensorflow>=2.5.0
+
+# Utilities
+Pillow>=8.0.0
+scipy>=1.5.0
+
+# Development (optional)
+ipython>=7.0.0
+jupyter>=1.0.0
+
+# Optional GPU support (if needed):
+# tensorflow-gpu>=2.5.0
