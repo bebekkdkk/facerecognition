@@ -4,7 +4,7 @@ Enrollment Script - Face Enrollment Module
 - Extract embedding untuk setiap pose
 - Average embeddings menjadi single representation
 - Simpan ke database
-- Optimized untuk Raspberry Pi 3 + TensorFlow Lite
+- Optimized untuk Raspberry Pi 4 (Model B) + TensorFlow Lite
 """
 
 import runtime_compat  # noqa: F401 - apply runtime env guards early
@@ -38,7 +38,7 @@ if IS_RASPBERRY_PI:
     cv2.setNumThreads(1)
 
 class PoseEnrollmentSystem:
-    """Multi-pose enrollment system untuk Raspberry Pi"""
+    """Multi-pose enrollment system untuk Raspberry Pi 4 and similar ARM devices"""
     
     def __init__(self):
         """Initialize enrollment system"""

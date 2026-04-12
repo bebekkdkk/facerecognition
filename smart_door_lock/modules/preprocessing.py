@@ -8,6 +8,11 @@ Image Preprocessing Module
 
 import cv2
 import numpy as np
+import sys
+import os
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import TARGET_FACE_SIZE, FRAME_HEIGHT, FRAME_WIDTH, IS_RASPBERRY_PI
 
 # Choose interpolation method based on platform

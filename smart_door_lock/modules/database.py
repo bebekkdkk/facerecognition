@@ -2,14 +2,18 @@
 Face Database Module - SQLite3 Version
 - Use SQLite3 (built-in Python) untuk vector similarity search
 - Store dan retrieve face embeddings
-- FULLY compatible dengan Raspberry Pi 3 (NO PyArrow/LanceDB issues)
+This implementation uses SQLite3 and stores embeddings as float32 BLOBs.
 """
 
 import os
 import sqlite3
 import numpy as np
 import json
+import sys
 from datetime import datetime
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DB_NAME, EMBEDDINGS_TABLE, DATA_DIR
 
 
@@ -23,7 +27,7 @@ class FaceDatabase:
         Args:
             db_path: Path ke database SQLite3
         """
-        self.db_path = db_path
+        self.db_path = self._resolve_db_path(db_path)
         self.table_name = EMBEDDINGS_TABLE
         
         # Ensure data directory exists
@@ -62,6 +66,24 @@ class FaceDatabase:
         except Exception as e:
             print(f"[ERROR] Database initialization failed: {e}")
             raise
+
+    @staticmethod
+    def _resolve_db_path(db_path):
+        """
+        Resolve database file path.
+
+        If a directory exists at the configured path (legacy LanceDB artifact),
+        switch to a SQLite filename in the same data directory.
+        """
+        # If configured path is a directory (e.g., legacy LanceDB folder),
+        # choose a sqlite filename in the same directory instead.
+        if os.path.isdir(db_path):
+            fallback_path = os.path.join(os.path.dirname(db_path), "face_database.sqlite3")
+            print(f"[WARNING] Configured DB path is a directory: {db_path}")
+            print(f"[INFO] Using SQLite file instead: {fallback_path}")
+            return fallback_path
+
+        return db_path
     
     def create_table(self):
         """Compatibility method - already created in __init__"""
@@ -84,9 +106,10 @@ class FaceDatabase:
             return False
         
         try:
-            # Generate person_id jika tidak ada
+            # Generate person_id jika tidak ada - using uuid4 untuk ensure uniqueness
             if person_id is None:
-                person_id = f"user_{int(datetime.now().timestamp())}"
+                import uuid
+                person_id = f"user_{uuid.uuid4().hex[:12]}"
             
             # Average semua embeddings
             if len(embeddings) == 1:

@@ -1,113 +1,85 @@
 """
-Face Detection Module
-- Use Haar Cascade untuk deteksi wajah
-- Simple dan reliable untuk Raspberry Pi
+Face Detector using OpenCV Haar Cascade.
+
+Provides a simple `FaceDetector` wrapper that returns detected faces
+in format: (x, y, w, h, confidence).
+
+This implementation is lightweight and suitable for Raspberry Pi 4.
 """
 
+import os
 import cv2
 import numpy as np
-from config import FACE_DETECT_CONFIDENCE, FACE_MIN_SCALE, HAAR_CASCADE_PATH
+import sys
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import HAAR_CASCADE_PATH, FACE_MIN_SCALE
 
 
 class FaceDetector:
-    """Face detector menggunakan Haar Cascade - Optimized untuk RPi"""
-    
-    def __init__(self, model_path=None):
-        """
-        Initialize face detector dengan Haar Cascade lokal
-        
+    """Haar Cascade face detector wrapper."""
+
+    def __init__(self, cascade_path=None, min_size=None, scale_factor=1.1, min_neighbors=5):
+        """Initialize detector.
+
         Args:
-            model_path (str): Optional path ke Haar Cascade model (override config)
+            cascade_path (str): Path to Haar cascade XML file.
+            min_size (tuple|int): Minimum face size (w,h) or int for square.
+            scale_factor (float): Scale factor for detectMultiScale.
+            min_neighbors (int): minNeighbors for detectMultiScale.
         """
-        # Use provided path atau fallback ke config
-        cascade_path = model_path or HAAR_CASCADE_PATH
-        
-        try:
-            self.haar_cascade = cv2.CascadeClassifier(cascade_path)
-            
-            # Check jika cascade loaded berhasil
-            if self.haar_cascade.empty():
-                print(f"[WARNING] Haar Cascade tidak bisa di-load dari: {cascade_path}")
-                print(f"[INFO] Fallback ke cascade default dari cv2.data")
-                self.haar_cascade = cv2.CascadeClassifier(
-                    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-                )
-            else:
-                print(f"[INFO] Haar Cascade loaded successfully: {cascade_path}")
-        except Exception as e:
-            print(f"[ERROR] Failed to load Haar Cascade: {e}")
-            # Fallback ke default
-            self.haar_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            )
-        
-    def detect_with_haar(self, frame):
-        """
-        Detect wajah menggunakan Haar Cascade lokal
-        
+        if cascade_path is None:
+            cascade_path = HAAR_CASCADE_PATH
+
+        # Fallback to OpenCV's bundled cascades if file missing
+        if not os.path.exists(cascade_path):
+            default = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+            cascade_path = default
+
+        self.cascade_path = cascade_path
+        self.detector = cv2.CascadeClassifier(self.cascade_path)
+
+        if min_size is None:
+            min_size = (FACE_MIN_SCALE, FACE_MIN_SCALE)
+        elif isinstance(min_size, int):
+            min_size = (min_size, min_size)
+
+        self.min_size = tuple(min_size)
+        self.scale_factor = scale_factor
+        self.min_neighbors = min_neighbors
+
+    def detect(self, image):
+        """Detect faces in an image.
+
         Args:
-            frame: Input frame (BGR)
-            
+            image (np.ndarray): BGR image from OpenCV.
+
         Returns:
-            List of detections [(x, y, w, h, confidence), ...]
+            list of tuples: [(x, y, w, h, confidence), ...]
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        try:
-            faces = self.haar_cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.3,
-                minNeighbors=5,
-                minSize=(FACE_MIN_SCALE, FACE_MIN_SCALE)
-            )
-            
-            # Convert dari (x,y,w,h) ke [(x,y,w,h,conf), ...]
-            # Haar Cascade tidak memberikan confidence score, default 1.0
-            detections = [(x, y, w, h, 1.0) for x, y, w, h in faces]
-            return detections
-        except Exception as e:
-            print(f"[ERROR] Haar Cascade detection failed: {e}")
+        if image is None:
             return []
-    
-    def detect(self, frame):
-        """
-        Detect wajah dalam frame - Gunakan Haar Cascade
-        
-        Args:
-            frame: Input frame (BGR)
-            
-        Returns:
-            List of detections dengan format (x, y, w, h, confidence)
-        """
-        return self.detect_with_haar(frame)
-    
-    def draw_detections(self, frame, detections, thickness=2, 
-                       color=(0, 255, 0), show_confidence=True):
-        """
-        Draw bounding boxes pada frame
-        
-        Args:
-            frame: Input frame
-            detections: List of detections
-            thickness: Line thickness
-            color: BGR color tuple
-            show_confidence: Show confidence score
-            
-        Returns:
-            Frame dengan bounding boxes
-        """
-        frame_copy = frame.copy()
-        
-        for detection in detections:
-            x, y, w, h, conf = detection
-            
-            # Draw rectangle
-            cv2.rectangle(frame_copy, (x, y), (x+w, y+h), color, thickness)
-            
-            # Draw confidence
-            if show_confidence:
-                label = f"{conf:.2f}"
-                cv2.putText(frame_copy, label, (x, y-5),
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-        
-        return frame_copy
+
+        # Convert to grayscale for Haar detector
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        faces = self.detector.detectMultiScale(
+            gray,
+            scaleFactor=self.scale_factor,
+            minNeighbors=self.min_neighbors,
+            minSize=self.min_size
+        )
+
+        results = []
+        img_area = max(1, image.shape[0] * image.shape[1])
+        for (x, y, w, h) in faces:
+            # Heuristic confidence: proportional to face area relative to image
+            area = w * h
+            conf = min(1.0, (area / img_area) * 5.0)
+            results.append((int(x), int(y), int(w), int(h), float(conf)))
+
+        return results

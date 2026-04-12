@@ -2,12 +2,17 @@
 Face Embedding Module
 - Extract face embeddings menggunakan MobileFaceNet TensorFlow Lite model
 - L2 normalization
-- Optimized untuk Raspberry Pi 3
+- Optimized untuk Raspberry Pi 4 (Model B) dan perangkat ARM serupa
 """
 
 import cv2
 import numpy as np
 import threading
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.tflite_utils import get_tflite_interpreter_class
 
 # Global interpreter dan lock untuk thread-safety

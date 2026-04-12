@@ -6,8 +6,27 @@ Optimized untuk Raspberry Pi
 import os
 import platform
 
-# Detect Raspberry Pi environment
-IS_RASPBERRY_PI = os.path.exists('/proc/device-tree/model') or platform.machine() in ('armv7l', 'armv6l', 'aarch64')
+
+def _is_raspberry_pi():
+    """Detect Raspberry Pi (any model) by device-tree model or machine string.
+
+    Returns True for Raspberry Pi 4 as well as earlier Pi boards.
+    """
+    model_file = '/proc/device-tree/model'
+    if os.path.exists(model_file):
+        try:
+            with open(model_file, 'r') as f:
+                model = f.read().lower()
+            return 'raspberry pi' in model
+        except Exception:
+            return False
+
+    m = platform.machine().lower()
+    return m.startswith('arm') or 'aarch' in m
+
+
+# Generic Raspberry Pi detection (covers Pi4)
+IS_RASPBERRY_PI = _is_raspberry_pi()
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,25 +41,26 @@ MOBILEFACENET_PATH = os.path.join(MODELS_DIR, 'MobileFaceNet.tflite')
 ANTI_SPOOFING_PATH = os.path.join(MODELS_DIR, 'FaceAntiSpoofing.tflite')
 
 # Database
-DB_NAME = os.path.join(DATA_DIR, 'face_database.db')
+# Use SQLite filename (consistent with modules/database.py fallback and docs)
+DB_NAME = os.path.join(DATA_DIR, 'face_database.sqlite3')
 EMBEDDINGS_TABLE = 'face_embeddings'
 
-# Camera Settings - Optimized untuk RPi
+# Camera Settings
 CAMERA_INDEX = 0
+# For Raspberry Pi 4 (Model B) we can use standard 640x480 @30fps.
 if IS_RASPBERRY_PI:
-    # RPi dengan keterbatasan resource, gunakan lower resolution
-    FRAME_WIDTH = 480
-    FRAME_HEIGHT = 360
-    FPS = 20  # Lower FPS untuk reduce CPU
+    FRAME_WIDTH = 640
+    FRAME_HEIGHT = 480
+    FPS = 30
 else:
-    # Desktop/non-RPi systems
     FRAME_WIDTH = 640
     FRAME_HEIGHT = 480
     FPS = 30
 
 # Face Detection Settings
 FACE_DETECT_CONFIDENCE = 0.5
-FACE_MIN_SCALE = 40 if IS_RASPBERRY_PI else 50
+# Use slightly larger min scale on more capable devices
+FACE_MIN_SCALE = 50
 
 # Face Preprocessing
 TARGET_FACE_SIZE = (112, 112)  # MobileFaceNet standard input

@@ -1,7 +1,7 @@
 """
 Smart Door Lock - Main Application
 Face Recognition + Anti-Spoofing System
-TensorFlow Lite + Raspberry Pi 3 Optimized
+TensorFlow Lite + Raspberry Pi 4 Optimized
 
 Main entry point untuk:
 - Real-time face recognition dengan anti-spoofing check

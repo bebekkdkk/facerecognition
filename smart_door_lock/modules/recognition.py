@@ -2,11 +2,16 @@
 Face Recognition Module
 - Compare face embeddings dengan database
 - Cosine similarity matching
-- Optimized untuk Raspberry Pi 3
+- Optimized untuk Raspberry Pi 4 (Model B) dan perangkat ARM serupa
 """
 
 import numpy as np
+import sys
+import os
 from datetime import datetime
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.embedder import cosine_similarity, EmbeddingProcessor
 
 

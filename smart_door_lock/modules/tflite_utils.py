@@ -23,5 +23,5 @@ def get_tflite_interpreter_class():
 
     raise ImportError(
         "No TensorFlow Lite interpreter available. Install `tflite-runtime` "
-        "for Raspberry Pi 3 (recommended)."
+        "for Raspberry Pi 4 (recommended)."
     )
